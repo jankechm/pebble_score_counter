@@ -1,0 +1,28 @@
+{
+  "name": "score_counter_rc",
+  "author": "Marek Jankech",
+  "version": "1.0.0",
+  "keywords": ["score-counter, remote-control"],
+  "private": true,
+  "dependencies": {},
+  "pebble": {
+    "displayName": "ScoreCounterRC",
+    "uuid": "eb31d3a1-b305-4b8c-a806-fbf995567f85",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "aplite",
+      "basalt",
+      "diorite"
+    ],
+    "watchapp": {
+      "watchface": false
+    },
+    "messageKeys": [
+      "dummy"
+    ],
+    "resources": {
+      "media": []
+    }
+  }
+}

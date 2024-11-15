@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "pebble.h": "c",
+        "score_counter_app.h": "c"
+    }
+}
