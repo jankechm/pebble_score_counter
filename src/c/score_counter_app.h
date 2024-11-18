@@ -7,22 +7,29 @@
 #include <pebble.h>
 
 #define MIN_SCORE 0
-#define MAX_SCORE 199
+#define MAX_SCORE 999
 
 #define INBOUND_SIZE 50
 #define OUTBOUND_SIZE 50
 
 #define RESET_BG_COLOR_MS 500
 
+#define MARGIN 8
+
 #define STATUS_BAR_HEIGHT 26
 #define STATUS_BAR_ICON_WIDTH_HEIGHT 15
+#define SCORE_TEXT_RECT_HEIGHT 36
+
+#define SC_LONGER_DIMENSION 48
+#define SC_SHORTER_DIMENSION 12
 
 #define CONN_BUFF_SIZE 8
-#define TIME_BUFF_SIZE 8
+#define TIME_BUFF_SIZE 12
 #define BATT_CHARGE_BUFF_SIZE 5
 
 #define LINKED_TXT "Linked"
 #define NO_LINK_TXT "No link"
+
 
 /**
  * Enums
@@ -73,6 +80,24 @@ typedef enum {
 } SCPositionRelativeToReferee;
 
 typedef enum {
+    OPPONENT_SCORE,
+    MY_SCORE,
+    WHOLE_SCORE
+} ScoreOnSmartwatch;
+
+typedef enum {
+    NORMAL_MODE,
+    SETTING_MODE
+} ButtonMode;
+
+typedef enum {
+    SC_SET_LEFT,
+    SC_SET_TOP,
+    SC_SET_RIGHT,
+    SC_SET_BOTTOM
+} SettingModeSCPosition;
+
+typedef enum {
   CMD_KEY = 10,
   SCORE_1_KEY = 11,
   SCORE_2_KEY = 12,
@@ -93,6 +118,12 @@ typedef enum {
   S_SC_POS_TO_REFEREE_KEY = 16
 } Storage;
 
+typedef enum {
+    SCORE_1 = 0x1,
+    SCORE_2 = 0x2
+} ScoreNumber;
+
+
 /**
  * Structs
  */
@@ -104,10 +135,11 @@ typedef struct {
 } TopBarInfo;
 
 typedef struct {
-  uint8_t score_1;
-  uint8_t score_2;
+  uint16_t score_1;
+  uint16_t score_2;
   char score_1_text[4];
   char score_2_text[4];
+  char whole_score_text[8];
   time_t timestamp;
   UserRole user_role;
   SCPositionRelativeToPlayer sc_2_player_position;
@@ -121,8 +153,21 @@ typedef struct {
 
 static void send_msg(DictSendCmdVal cmd_val);
 static void horizontal_ruler_update_proc(Layer *layer, GContext *ctx);
-static GRect init_text_layer(Layer *parent_layer, TextLayer **text_layer, 
-  int16_t y, int16_t h, int16_t additional_right_margin, char *font_key);
+// static GRect init_text_layer(Layer *parent_layer, TextLayer **text_layer, 
+//   int16_t y, int16_t h, int16_t additional_right_margin, char *font_key);
+static void sc_update_proc(Layer *layer, GContext *ctx);
+static int16_t calc_score_text_layer_y_coord(GRect parent_layer_bounds, 
+  ScoreOnSmartwatch which_score, int16_t height);
+static GRect init_score_text_layer(Layer *parent_layer, TextLayer **text_layer,
+  int16_t h, char *font_key, ScoreOnSmartwatch which_score);
+static void init_separate_score_text_layers(Layer *window_layer);
+static void init_whole_score_text_layer(Layer *window_layer);
+static void init_score_text_layers(Layer *window_layer);
+static inline void create_sc_layer_on_top(GRect bounds);
+static inline void create_sc_layer_on_right(GRect bounds);
+static inline void create_sc_layer_on_bottom(GRect bounds);
+static inline void create_sc_layer_on_left(GRect bounds);
+static void create_score_counter_layer(Layer *window_layer);
 static void main_window_load(Window *window);
 static void main_window_unload(Window *window);
 static void up_click_handler(ClickRecognizerRef recognizer, void *context);
@@ -133,6 +178,10 @@ static void down_long_click_handler_down(
   ClickRecognizerRef recognizer, void *context);
 static void select_click_handler(ClickRecognizerRef recognizer, void *context);
 static void select_long_click_handler_down(ClickRecognizerRef recognizer, void *context);
+static void back_click_handler(ClickRecognizerRef recognizer, void *context);
+static void set_setting_mode_cfg_from_normal_mode_cfg();
+static void set_normal_mode_cfg_from_setting_mode_cfg();
+static void set_score(ScoreNumber score_number);
 static void outbox_sent_handler(DictionaryIterator *iterator, void *context);
 // static void send_msg_timeout_handler(void *context);
 static void reset_bg_color_callback(void *data);
