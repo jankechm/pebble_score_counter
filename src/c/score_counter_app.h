@@ -174,6 +174,7 @@ static void main_window_load(Window *window);
 static void main_window_unload(Window *window);
 static void blink_sc_timer_handler(void *context);
 static void adjust_whole_score_font();
+static void swap_numbers(uint16_t *num1, uint16_t *num2);
 static void up_click_handler(ClickRecognizerRef recognizer, void *context);
 static void down_click_handler(ClickRecognizerRef recognizer, void *context);
 static void up_long_click_handler_down(
@@ -185,9 +186,8 @@ static void select_long_click_handler_down(ClickRecognizerRef recognizer, void *
 static void back_click_handler(ClickRecognizerRef recognizer, void *context);
 static void set_setting_mode_cfg_from_normal_mode_cfg();
 static void set_normal_mode_cfg_from_setting_mode_cfg();
-static void set_score(ScoreNumber score_number);
+static void set_score(ScoreNumber score_number, bool persist, bool send);
 static void outbox_sent_handler(DictionaryIterator *iterator, void *context);
-// static void send_msg_timeout_handler(void *context);
 static void reset_bg_color_callback(void *data);
 static void set_bg_color_on_colored_screen(GColor8 color);
 static void click_config_provider(void *context);

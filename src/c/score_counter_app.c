@@ -31,6 +31,7 @@ static SettingModeSCPosition setting_mode_sc_position;
 static AppTimer *blink_sc_timer = NULL;
 
 static bool is_larger_font_in_whole_score;
+static bool is_score_swapped = false;
 
 
 static void send_msg(DictSendCmdVal cmd_val) {
@@ -349,8 +350,15 @@ static void adjust_whole_score_font() {
   }
 }
 
+static void swap_numbers(uint16_t *num1, uint16_t *num2) {
+  uint16_t tmp = *num1;
+  *num1 = *num2;
+  *num2 = tmp;
+}
+
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
+    // Increment score_2 in NORMAL_MODE
     if (score->score_2 < MAX_SCORE) {
       score->score_2 += 1;
     } else {
@@ -359,8 +367,9 @@ static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
 
     adjust_whole_score_font();
 
-    set_score(SCORE_2);
+    set_score(SCORE_2, true, true);
   } else {
+    // Setting Score Counter position in SETTING_MODE
     switch (setting_mode_sc_position) {
       case SC_SET_LEFT:
         setting_mode_sc_position = SC_SET_TOP;
@@ -386,6 +395,7 @@ static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
 
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
+    // Increment score_1 in NORMAL_MODE
     if (score->score_1 < MAX_SCORE) {
       score->score_1 += 1;
     } else {
@@ -394,7 +404,14 @@ static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
 
     adjust_whole_score_font();
 
-    set_score(SCORE_1);
+    set_score(SCORE_1, true, true);
+  } else {
+    // Swapping score in SETTING_MODE
+    swap_numbers(&score->score_1, &score->score_2);
+
+    is_score_swapped = !is_score_swapped;
+
+    set_score(SCORE_1 | SCORE_2, false, false);
   }
 }
 
@@ -408,7 +425,7 @@ static void up_long_click_handler_down(ClickRecognizerRef recognizer, void *cont
 
     adjust_whole_score_font();
 
-    set_score(SCORE_2);
+    set_score(SCORE_2, true, true);
   }
 }
 
@@ -422,18 +439,18 @@ static void down_long_click_handler_down(ClickRecognizerRef recognizer, void *co
 
     adjust_whole_score_font();
 
-    set_score(SCORE_1);
+    set_score(SCORE_1, true, true);
   }
 }
 
-/**
- * Select button single click should re-send last score.
- */
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
+    // Re-send last score in NORMAL_MODE
     reset_bg_color_callback(NULL);
     send_msg(CMD_SET_SCORE_VAL);
-  } else { // Stop SC blinking, confirm SC orientation and score if swapped.
+  } else {
+    // In SETTING_MODE: stop Score Counter blinking, confirm Score Counter 
+    // orientation and score if swapped.
     Layer *window_layer = window_get_root_layer(s_main_window);
 
     set_normal_mode_cfg_from_setting_mode_cfg();
@@ -445,6 +462,12 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
     init_score_counter_layer(window_layer);
     init_score_text_layers(window_layer);
     init_ruler_layer(window_layer);
+
+    if (is_score_swapped) {
+      // Confirm swapped score as the new score.
+      set_score(SCORE_1 | SCORE_2, true, true);
+      is_score_swapped = false;
+    }
   }
 }
 
@@ -458,51 +481,66 @@ static void select_long_click_handler_down(ClickRecognizerRef recognizer, void *
 
     adjust_whole_score_font();
 
-    set_score(SCORE_1 | SCORE_2);
+    set_score(SCORE_1 | SCORE_2, true, true);
   }
 }
 
 static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
+    // Enter SETTING_MODE
     set_setting_mode_cfg_from_normal_mode_cfg();
 
     blink_sc_timer = app_timer_register(SC_BLINK_INTERVAL, blink_sc_timer_handler, NULL);
 
     btn_mode = SETTING_MODE;
   } else {
-    // Stop SC blinking, restore SC position & last score if swapped.
+    // Cancel SETTING_MODE - stop Score Counter blinking, restore last
+    // Score Counter position and restore score if swapped.
     Layer *window_layer = window_get_root_layer(s_main_window);
 
     btn_mode = NORMAL_MODE;
 
     app_timer_cancel(blink_sc_timer);
+
+    // Take back swapping.
+    if (is_score_swapped) {
+      swap_numbers(&score->score_1, &score->score_2);
+      is_score_swapped = false;
+    }
     
     init_score_counter_layer(window_layer);
     init_score_text_layers(window_layer);
     init_ruler_layer(window_layer);
-
-    // snprintf(score->score_1_text, sizeof(score->score_1_text), "%d", score->score_1);
-    // snprintf(score->score_2_text, sizeof(score->score_2_text), "%d", score->score_2);
   }
 }
 
 /**
  * score_number: a bitmask of all the score parts that have changed
  */
-static void set_score(ScoreNumber score_number) {
+static void set_score(ScoreNumber score_number, bool persist, bool send) {
   if (score_number & SCORE_1) {
     snprintf(score->score_1_text, sizeof(score->score_1_text), "%d", score->score_1);
-    persist_write_int(S_SCORE_1_KEY, score->score_1);
+    
+    if (persist) {
+      persist_write_int(S_SCORE_1_KEY, score->score_1);
+    }
 
-    if (score->user_role == PLAYER) {
+    if ((btn_mode == SETTING_MODE
+      && (setting_mode_sc_position == SC_SET_LEFT || setting_mode_sc_position == SC_SET_RIGHT)) 
+        || (btn_mode == NORMAL_MODE && score->user_role == PLAYER)) {
       text_layer_set_text(s_my_score_text_layer, score->score_1_text);
     }
   }
   if (score_number & SCORE_2) {
     snprintf(score->score_2_text, sizeof(score->score_2_text), "%d", score->score_2);
-    persist_write_int(S_SCORE_2_KEY, score->score_2);
+    
+    if (persist) {
+      persist_write_int(S_SCORE_2_KEY, score->score_2);
+    }
 
-    if (score->user_role == PLAYER) {
+    if ((btn_mode == SETTING_MODE
+      && (setting_mode_sc_position == SC_SET_LEFT || setting_mode_sc_position == SC_SET_RIGHT)) 
+        || (btn_mode == NORMAL_MODE && score->user_role == PLAYER)) {
       text_layer_set_text(s_opponent_score_text_layer, score->score_2_text);
     }
   }
@@ -510,14 +548,22 @@ static void set_score(ScoreNumber score_number) {
   snprintf(score->whole_score_text, sizeof(score->whole_score_text), "%s:%s", 
       score->score_2_text, score->score_1_text);
 
-  if (score->user_role == REFEREE) {
+  if ((btn_mode == SETTING_MODE 
+    && (setting_mode_sc_position == SC_SET_TOP || setting_mode_sc_position == SC_SET_BOTTOM)) 
+      || (btn_mode == NORMAL_MODE && score->user_role == REFEREE)) {
     text_layer_set_text(s_whole_score_text_layer, score->whole_score_text);
   }
 
   time(&score->timestamp);
   reset_bg_color_callback(NULL);
-  send_msg(CMD_SET_SCORE_VAL);
-  persist_write_int(S_TIMESTAMP_KEY, score->timestamp);
+
+  if (send) {
+    send_msg(CMD_SET_SCORE_VAL);
+  }
+
+  if (persist) {
+    persist_write_int(S_TIMESTAMP_KEY, score->timestamp);
+  }
 }
 
 static void set_setting_mode_cfg_from_normal_mode_cfg() {
