@@ -28,6 +28,8 @@ static Score *score;
 static ButtonMode btn_mode = NORMAL_MODE;
 static SettingModeSCPosition setting_mode_sc_position;
 
+static AppTimer *blink_sc_timer = NULL;
+
 
 static void send_msg(DictSendCmdVal cmd_val) {
   // If not connected, do not continue.
@@ -347,6 +349,11 @@ static void main_window_unload(Window *window) {
   free(score);
 }
 
+static void blink_sc_timer_handler(void *context) {
+  layer_set_hidden(score_counter_layer, !layer_get_hidden(score_counter_layer));
+  blink_sc_timer = app_timer_register(SC_BLINK_INTERVAL, blink_sc_timer_handler, NULL);
+}
+
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
     if (score->score_2 < MAX_SCORE) {
@@ -441,6 +448,7 @@ static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
     set_setting_mode_cfg_from_normal_mode_cfg();
     // tick_timer_service_subscribe(SECOND_UNIT, blink_score_tick_handler);
     // TODO use AppTimer instead of tick_timer service
+    blink_sc_timer = app_timer_register(SC_BLINK_INTERVAL, blink_sc_timer_handler, NULL);
 
     btn_mode = SETTING_MODE;
   } else {
@@ -454,6 +462,8 @@ static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
 
     // snprintf(score->score_1_text, sizeof(score->score_1_text), "%d", score->score_1);
     // snprintf(score->score_2_text, sizeof(score->score_2_text), "%d", score->score_2);
+
+    app_timer_cancel(blink_sc_timer);
 
     btn_mode = NORMAL_MODE;
   }

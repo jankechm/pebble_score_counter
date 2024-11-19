@@ -13,6 +13,7 @@
 #define OUTBOUND_SIZE 50
 
 #define RESET_BG_COLOR_MS 500
+#define SC_BLINK_INTERVAL 400
 
 #define MARGIN 8
 
@@ -170,6 +171,7 @@ static inline void create_sc_layer_on_left(GRect bounds);
 static void create_score_counter_layer(Layer *window_layer);
 static void main_window_load(Window *window);
 static void main_window_unload(Window *window);
+static void blink_sc_timer_handler(void *context);
 static void up_click_handler(ClickRecognizerRef recognizer, void *context);
 static void down_click_handler(ClickRecognizerRef recognizer, void *context);
 static void up_long_click_handler_down(
