@@ -105,24 +105,6 @@ static void sc_update_proc(Layer *layer, GContext *ctx) {
   // }
 }
 
-// static GRect init_text_layer(Layer *parent_layer, TextLayer **text_layer, int16_t y, int16_t h, int16_t additional_right_margin, char *font_key) {
-//   // why "-1" (and then "+2")? because for this font we need to compensate for weird white-spacing
-//   const int16_t font_compensator = strcmp(font_key, FONT_KEY_LECO_38_BOLD_NUMBERS) == 0 ? 3 : 1;
-
-//   const GRect frame = GRect(MARGIN - font_compensator, y, 
-//     layer_get_bounds(parent_layer).size.w - 2 * MARGIN + 2 * font_compensator - additional_right_margin, h);
-
-//   *text_layer = text_layer_create(frame);
-//   text_layer_set_background_color(*text_layer, GColorClear);
-//   // text_layer_set_text_color(*text_layer, PBL_IF_COLOR_ELSE(GColorWhite, GColorBlack));
-//   text_layer_set_text_color(*text_layer, GColorBlack);
-//   text_layer_set_font(*text_layer, fonts_get_system_font(font_key));
-//   text_layer_set_text_alignment(*text_layer, GTextAlignmentCenter);
-//   layer_add_child(parent_layer, text_layer_get_layer(*text_layer));
-
-//   return frame;
-// }
-
 static int16_t calc_score_text_layer_y_coord(GRect parent_layer_bounds, 
   ScoreOnSmartwatch which_score, int16_t height) {
   
@@ -187,47 +169,32 @@ static void init_whole_score_text_layer(Layer *window_layer) {
 }
 
 static void init_score_text_layers(Layer *window_layer) {
+  if (s_whole_score_text_layer != NULL) {
+    text_layer_destroy(s_whole_score_text_layer);
+    s_whole_score_text_layer = NULL;
+  }
+  if (s_opponent_score_text_layer != NULL) {
+    text_layer_destroy(s_opponent_score_text_layer);
+    s_opponent_score_text_layer = NULL;
+  }
+  if (s_my_score_text_layer != NULL) {
+    text_layer_destroy(s_my_score_text_layer);
+    s_my_score_text_layer = NULL;
+  }
+
   // SETTING_MODE has priority
   if (btn_mode == SETTING_MODE) {
     if (setting_mode_sc_position == SC_SET_LEFT 
       || setting_mode_sc_position == SC_SET_RIGHT) {
         init_separate_score_text_layers(window_layer);
-
-        if (s_whole_score_text_layer != NULL) {
-          text_layer_destroy(s_whole_score_text_layer);
-          s_whole_score_text_layer = NULL;
-        }
     } else {
         init_whole_score_text_layer(window_layer);
-
-        if (s_opponent_score_text_layer != NULL) {
-          text_layer_destroy(s_opponent_score_text_layer);
-          s_opponent_score_text_layer = NULL;
-        }
-        if (s_my_score_text_layer != NULL) {
-          text_layer_destroy(s_my_score_text_layer);
-          s_my_score_text_layer = NULL;
-        }
     }
   } else { // NORMAL_MODE
     if (score->user_role == PLAYER) {
       init_separate_score_text_layers(window_layer);
-
-      if (s_whole_score_text_layer != NULL) {
-        text_layer_destroy(s_whole_score_text_layer);
-        s_whole_score_text_layer = NULL;
-      }
     } else {
       init_whole_score_text_layer(window_layer);
-
-      if (s_opponent_score_text_layer != NULL) {
-        text_layer_destroy(s_opponent_score_text_layer);
-        s_opponent_score_text_layer = NULL;
-      }
-      if (s_my_score_text_layer != NULL) {
-        text_layer_destroy(s_my_score_text_layer);
-        s_my_score_text_layer = NULL;
-      }
     }
   }
 }
@@ -258,6 +225,7 @@ static inline void create_sc_layer_on_left(GRect bounds) {
 static void create_score_counter_layer(Layer *window_layer) {
   if (score_counter_layer != NULL) {
     layer_destroy(score_counter_layer);
+    score_counter_layer = NULL;
   }
 
   const GRect bounds = layer_get_bounds(window_layer);
@@ -317,6 +285,7 @@ static void init_ruler_layer(Layer *window_layer) {
   } else {
     if (horizontal_ruler_layer != NULL) {
       layer_destroy(horizontal_ruler_layer);
+      horizontal_ruler_layer = NULL;
     }
   }
 }
@@ -335,6 +304,8 @@ static void main_window_unload(Window *window) {
 
   if (s_my_score_text_layer != NULL) {
     text_layer_destroy(s_my_score_text_layer);
+  }
+  if (s_opponent_score_text_layer != NULL) {
     text_layer_destroy(s_opponent_score_text_layer);
   }
   if (s_whole_score_text_layer != NULL) {
@@ -427,8 +398,22 @@ static void down_long_click_handler_down(ClickRecognizerRef recognizer, void *co
  * Select button single click should re-send last score.
  */
 static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
-  reset_bg_color_callback(NULL);
-  send_msg(CMD_SET_SCORE_VAL);
+  if (btn_mode == NORMAL_MODE) {
+    reset_bg_color_callback(NULL);
+    send_msg(CMD_SET_SCORE_VAL);
+  } else { // Stop SC blinking, confirm SC orientation and score if swapped.
+    Layer *window_layer = window_get_root_layer(s_main_window);
+
+    set_normal_mode_cfg_from_setting_mode_cfg();
+
+    btn_mode = NORMAL_MODE;
+
+    app_timer_cancel(blink_sc_timer);
+
+    init_score_counter_layer(window_layer);
+    init_score_text_layers(window_layer);
+    init_ruler_layer(window_layer);
+  }
 }
 
 /**
@@ -446,26 +431,24 @@ static void select_long_click_handler_down(ClickRecognizerRef recognizer, void *
 static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
     set_setting_mode_cfg_from_normal_mode_cfg();
-    // tick_timer_service_subscribe(SECOND_UNIT, blink_score_tick_handler);
-    // TODO use AppTimer instead of tick_timer service
+
     blink_sc_timer = app_timer_register(SC_BLINK_INTERVAL, blink_sc_timer_handler, NULL);
 
     btn_mode = SETTING_MODE;
   } else {
     // Stop SC blinking, restore SC position & last score if swapped.
-    // tick_timer_service_unsubscribe();
     Layer *window_layer = window_get_root_layer(s_main_window);
 
+    btn_mode = NORMAL_MODE;
+
+    app_timer_cancel(blink_sc_timer);
+    
     init_score_counter_layer(window_layer);
     init_score_text_layers(window_layer);
     init_ruler_layer(window_layer);
 
     // snprintf(score->score_1_text, sizeof(score->score_1_text), "%d", score->score_1);
     // snprintf(score->score_2_text, sizeof(score->score_2_text), "%d", score->score_2);
-
-    app_timer_cancel(blink_sc_timer);
-
-    btn_mode = NORMAL_MODE;
   }
 }
 
@@ -491,7 +474,7 @@ static void set_score(ScoreNumber score_number) {
   }
 
   snprintf(score->whole_score_text, sizeof(score->whole_score_text), "%s:%s", 
-      score->score_1_text, score->score_2_text);
+      score->score_2_text, score->score_1_text);
 
   if (score->user_role == REFEREE) {
     text_layer_set_text(s_whole_score_text_layer, score->whole_score_text);
@@ -531,20 +514,16 @@ static void set_normal_mode_cfg_from_setting_mode_cfg() {
       break;
     case SC_SET_TOP:
       score->user_role = REFEREE;
-      score->sc_2_player_position = OPPOSITE_SIDE;
+      score->sc_2_referee_position = OPPOSITE_SIDE;
       break;
     case SC_SET_BOTTOM:
       score->user_role = REFEREE;
-      score->sc_2_player_position = SAME_SIDE;
+      score->sc_2_referee_position = SAME_SIDE;
       break;
   }
 }
 
 static void outbox_sent_handler(DictionaryIterator *iterator, void *context) {
-  // Message was succesfully sent, cancel retry timer.
-  // app_timer_cancel(send_msg_timout_timer);
-  // send_msg_num_retries = 0;
-
   set_bg_color_on_colored_screen(GColorGreen);
 }
 
@@ -553,12 +532,34 @@ static void outbox_failed_handler(DictionaryIterator *iterator, AppMessageResult
 }
 
 static void reset_bg_color_callback(void *data) {
-  window_set_background_color(s_main_window, GColorWhite);
+  GColor8 bg_color = GColorWhite;
+
+  if (s_opponent_score_text_layer != NULL) {
+    text_layer_set_background_color(s_opponent_score_text_layer, bg_color);
+  }
+  if (s_my_score_text_layer != NULL) {
+    text_layer_set_background_color(s_my_score_text_layer, bg_color);
+  }
+  if (s_whole_score_text_layer != NULL) {
+    text_layer_set_background_color(s_whole_score_text_layer, bg_color);
+  }
+
+  window_set_background_color(s_main_window, bg_color);
 }
 
 static void set_bg_color_on_colored_screen(GColor8 color) {
   #ifdef PBL_COLOR
     window_set_background_color(s_main_window, color);
+
+    if (s_opponent_score_text_layer != NULL) {
+      text_layer_set_background_color(s_opponent_score_text_layer, color);
+    }
+    if (s_my_score_text_layer != NULL) {
+      text_layer_set_background_color(s_my_score_text_layer, color);
+    }
+    if (s_whole_score_text_layer != NULL) {
+      text_layer_set_background_color(s_whole_score_text_layer, color);
+    }
   #endif
 }
 
