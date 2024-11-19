@@ -505,6 +505,7 @@ static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
     // Take back swapping.
     if (is_score_swapped) {
       swap_numbers(&score->score_1, &score->score_2);
+      set_score(SCORE_1 | SCORE_2, true, true);
       is_score_swapped = false;
     }
     
