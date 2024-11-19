@@ -468,6 +468,11 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
       set_score(SCORE_1 | SCORE_2, true, true);
       is_score_swapped = false;
     }
+
+    // Persist user role & Score Counter position.
+    persist_write_int(S_USER_ROLE_KEY, score->user_role);
+    persist_write_int(S_SC_POS_TO_PLAYER_KEY, score->sc_2_player_position);
+    persist_write_int(S_SC_POS_TO_REFEREE_KEY, score->sc_2_referee_position);
   }
 }
 
