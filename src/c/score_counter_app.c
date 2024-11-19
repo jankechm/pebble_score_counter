@@ -30,6 +30,8 @@ static SettingModeSCPosition setting_mode_sc_position;
 
 static AppTimer *blink_sc_timer = NULL;
 
+static bool is_larger_font_in_whole_score;
+
 
 static void send_msg(DictSendCmdVal cmd_val) {
   // If not connected, do not continue.
@@ -95,14 +97,6 @@ static void sc_update_proc(Layer *layer, GContext *ctx) {
   graphics_context_set_fill_color(ctx, GColorBlack);
 
   graphics_fill_rect(ctx, GRect(0, 0, bounds.size.w, bounds.size.h), 4, GCornersAll);
-
-  // graphics_context_set_stroke_width(ctx, 2);
-
-  // if (score->user_role == PLAYER) {
-  //   graphics_draw_line(ctx, GPoint(0, bounds.size.h / 2), GPoint(bounds.size.w, bounds.size.h / 2));
-  // } else {
-  //   graphics_draw_line(ctx, GPoint(bounds.size.w / 2, 0), GPoint(bounds.size.w / 2, bounds.size.h));
-  // }
 }
 
 static int16_t calc_score_text_layer_y_coord(GRect parent_layer_bounds, 
@@ -121,7 +115,7 @@ static int16_t calc_score_text_layer_y_coord(GRect parent_layer_bounds,
       break;
     default:
       y = (parent_layer_bounds.size.h - STATUS_BAR_HEIGHT) 
-        / 2 + STATUS_BAR_HEIGHT - height / 2;
+        / 2 + STATUS_BAR_HEIGHT - height / 2 - Y_WHOLE_SCORE_CORRECTION;
       break;
   }
 
@@ -162,8 +156,13 @@ static void init_separate_score_text_layers(Layer *window_layer) {
 }
 
 static void init_whole_score_text_layer(Layer *window_layer) {
+  is_larger_font_in_whole_score = score->score_1 <= LARGER_FONT_SCORE_LIMIT 
+    || score->score_2 <= LARGER_FONT_SCORE_LIMIT;
+
   init_score_text_layer(window_layer, &s_whole_score_text_layer, 
-        SCORE_TEXT_RECT_HEIGHT, FONT_KEY_LECO_32_BOLD_NUMBERS, WHOLE_SCORE);
+    WHOLE_SCORE_TEXT_RECT_HEIGHT, 
+    is_larger_font_in_whole_score ? FONT_KEY_LECO_38_BOLD_NUMBERS : FONT_KEY_LECO_32_BOLD_NUMBERS,
+    WHOLE_SCORE);
 
   text_layer_set_text(s_whole_score_text_layer, score->whole_score_text);
 }
@@ -325,6 +324,31 @@ static void blink_sc_timer_handler(void *context) {
   blink_sc_timer = app_timer_register(SC_BLINK_INTERVAL, blink_sc_timer_handler, NULL);
 }
 
+static void adjust_whole_score_font() {
+  // Adjusting whole score font only makes sense in REFEREE user role.
+  if (score->user_role == REFEREE) {
+    if (score->score_1 <= LARGER_FONT_SCORE_LIMIT 
+      && score->score_2 <= LARGER_FONT_SCORE_LIMIT) {
+      
+      // Both score parts are below the LARGER_FONT_SCORE_LIMIT 
+      // - set the larger font if not already set.
+      if (!is_larger_font_in_whole_score) {
+        text_layer_set_font(s_whole_score_text_layer, 
+          fonts_get_system_font(FONT_KEY_LECO_38_BOLD_NUMBERS));
+        is_larger_font_in_whole_score = true;
+      }
+    } else {
+      // Any score part is over the larger font score limit
+      // - set the smaller font if not already set.
+      if (is_larger_font_in_whole_score) { // Change in score part to more than 2 digits
+        text_layer_set_font(s_whole_score_text_layer, 
+          fonts_get_system_font(FONT_KEY_LECO_32_BOLD_NUMBERS));
+        is_larger_font_in_whole_score = false;
+      }
+    }
+  }
+}
+
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
     if (score->score_2 < MAX_SCORE) {
@@ -332,6 +356,8 @@ static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
     } else {
       score->score_2 = MIN_SCORE;
     }
+
+    adjust_whole_score_font();
 
     set_score(SCORE_2);
   } else {
@@ -366,6 +392,8 @@ static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
       score->score_1 = MIN_SCORE;
     }
 
+    adjust_whole_score_font();
+
     set_score(SCORE_1);
   }
 }
@@ -378,6 +406,8 @@ static void up_long_click_handler_down(ClickRecognizerRef recognizer, void *cont
       score->score_2 = MAX_SCORE;
     }
 
+    adjust_whole_score_font();
+
     set_score(SCORE_2);
   }
 }
@@ -389,6 +419,8 @@ static void down_long_click_handler_down(ClickRecognizerRef recognizer, void *co
     } else {
       score->score_1 = MAX_SCORE;
     }
+
+    adjust_whole_score_font();
 
     set_score(SCORE_1);
   }
@@ -423,6 +455,8 @@ static void select_long_click_handler_down(ClickRecognizerRef recognizer, void *
   if (btn_mode == NORMAL_MODE) {
     score->score_1 = 0;
     score->score_2 = 0;
+
+    adjust_whole_score_font();
 
     set_score(SCORE_1 | SCORE_2);
   }

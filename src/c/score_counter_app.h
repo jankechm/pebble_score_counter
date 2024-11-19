@@ -8,6 +8,7 @@
 
 #define MIN_SCORE 0
 #define MAX_SCORE 999
+#define LARGER_FONT_SCORE_LIMIT 99
 
 #define INBOUND_SIZE 50
 #define OUTBOUND_SIZE 50
@@ -16,10 +17,12 @@
 #define SC_BLINK_INTERVAL 400
 
 #define MARGIN 8
+#define Y_WHOLE_SCORE_CORRECTION 10
 
 #define STATUS_BAR_HEIGHT 26
 #define STATUS_BAR_ICON_WIDTH_HEIGHT 15
 #define SCORE_TEXT_RECT_HEIGHT 36
+#define WHOLE_SCORE_TEXT_RECT_HEIGHT 38
 
 #define SC_LONGER_DIMENSION 48
 #define SC_SHORTER_DIMENSION 12
@@ -154,8 +157,6 @@ typedef struct {
 
 static void send_msg(DictSendCmdVal cmd_val);
 static void horizontal_ruler_update_proc(Layer *layer, GContext *ctx);
-// static GRect init_text_layer(Layer *parent_layer, TextLayer **text_layer, 
-//   int16_t y, int16_t h, int16_t additional_right_margin, char *font_key);
 static void sc_update_proc(Layer *layer, GContext *ctx);
 static int16_t calc_score_text_layer_y_coord(GRect parent_layer_bounds, 
   ScoreOnSmartwatch which_score, int16_t height);
@@ -172,6 +173,7 @@ static void create_score_counter_layer(Layer *window_layer);
 static void main_window_load(Window *window);
 static void main_window_unload(Window *window);
 static void blink_sc_timer_handler(void *context);
+static void adjust_whole_score_font();
 static void up_click_handler(ClickRecognizerRef recognizer, void *context);
 static void down_click_handler(ClickRecognizerRef recognizer, void *context);
 static void up_long_click_handler_down(
