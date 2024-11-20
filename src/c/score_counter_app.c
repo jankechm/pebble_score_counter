@@ -415,6 +415,9 @@ static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
   }
 }
 
+/**
+ * In NORMAL_MODE, decrement score_2.
+ */
 static void up_long_click_handler_down(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
     if (score->score_2 > MIN_SCORE) {
@@ -429,6 +432,9 @@ static void up_long_click_handler_down(ClickRecognizerRef recognizer, void *cont
   }
 }
 
+/**
+ * In NORMAL_MODE, decrement score_1.
+ */
 static void down_long_click_handler_down(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
     if (score->score_1 > MIN_SCORE) {
@@ -477,7 +483,7 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
 }
 
 /**
- * Select button long click should reset the score.
+ * In NORMAL_MODE, select button long click should reset the score.
  */
 static void select_long_click_handler_down(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
@@ -531,9 +537,7 @@ static void set_score(ScoreNumber score_number, bool persist, bool send) {
       persist_write_int(S_SCORE_1_KEY, score->score_1);
     }
 
-    if ((btn_mode == SETTING_MODE
-      && (setting_mode_sc_position == SC_SET_LEFT || setting_mode_sc_position == SC_SET_RIGHT)) 
-        || (btn_mode == NORMAL_MODE && score->user_role == PLAYER)) {
+    if (s_my_score_text_layer != NULL) {
       text_layer_set_text(s_my_score_text_layer, score->score_1_text);
     }
   }
@@ -544,9 +548,7 @@ static void set_score(ScoreNumber score_number, bool persist, bool send) {
       persist_write_int(S_SCORE_2_KEY, score->score_2);
     }
 
-    if ((btn_mode == SETTING_MODE
-      && (setting_mode_sc_position == SC_SET_LEFT || setting_mode_sc_position == SC_SET_RIGHT)) 
-        || (btn_mode == NORMAL_MODE && score->user_role == PLAYER)) {
+    if (s_opponent_score_text_layer != NULL) {
       text_layer_set_text(s_opponent_score_text_layer, score->score_2_text);
     }
   }
@@ -554,9 +556,7 @@ static void set_score(ScoreNumber score_number, bool persist, bool send) {
   snprintf(score->whole_score_text, sizeof(score->whole_score_text), "%s:%s", 
       score->score_2_text, score->score_1_text);
 
-  if ((btn_mode == SETTING_MODE 
-    && (setting_mode_sc_position == SC_SET_TOP || setting_mode_sc_position == SC_SET_BOTTOM)) 
-      || (btn_mode == NORMAL_MODE && score->user_role == REFEREE)) {
+  if (s_whole_score_text_layer != NULL) {
     text_layer_set_text(s_whole_score_text_layer, score->whole_score_text);
   }
 
