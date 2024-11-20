@@ -43,18 +43,17 @@ static void send_msg(DictSendCmdVal cmd_val) {
 
   uint8_t score_1_to_transfer;
   uint8_t score_2_to_transfer;
-  if ((score->user_role == PLAYER && score->sc_2_player_position == LEFT_EDGE) ||
-      (score->user_role == REFEREE && score->sc_2_referee_position == OPPOSITE_SIDE)) {
-    score_1_to_transfer = score->score_1;
-    score_2_to_transfer = score->score_2;
-  } else {
+  if (should_swap_before_send_or_after_receive()) {
     score_1_to_transfer = score->score_2;
     score_2_to_transfer = score->score_1;
+  } else {
+    score_1_to_transfer = score->score_1;
+    score_2_to_transfer = score->score_2;
   }
 
-  Tuplet cmd_tuplet = TupletInteger(CMD_KEY, (uint8_t)cmd_val);
-  Tuplet score1_tuplet = TupletInteger(SCORE_1_KEY, score_1_to_transfer);
-  Tuplet score2_tuplet = TupletInteger(SCORE_2_KEY, score_2_to_transfer);
+  Tuplet cmd_tuplet = TupletInteger(SEND_CMD_KEY, (uint8_t)cmd_val);
+  Tuplet score1_tuplet = TupletInteger(SEND_SCORE_1_KEY, score_1_to_transfer);
+  Tuplet score2_tuplet = TupletInteger(SEND_SCORE_2_KEY, score_2_to_transfer);
 
   DictionaryIterator *iter;
   AppMessageResult result_code = app_message_outbox_begin(&iter);
@@ -65,8 +64,8 @@ static void send_msg(DictSendCmdVal cmd_val) {
     dict_write_tuplet(iter, &score2_tuplet);
 
     // When syncing, timestamp is needed
-    if (cmd_val == CMD_SYNC_SCORE_VAL) {
-      Tuplet timestamp_tuplet = TupletInteger(TIMESTAMP_KEY, (unsigned int)score->timestamp);
+    if (cmd_val == SEND_CMD_SYNC_SCORE_VAL) {
+      Tuplet timestamp_tuplet = TupletInteger(SEND_TIMESTAMP_KEY, (unsigned int)score->timestamp);
       dict_write_tuplet(iter, &timestamp_tuplet);
     }
 
@@ -359,15 +358,25 @@ static void swap_numbers(uint16_t *num1, uint16_t *num2) {
 static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
     // Increment score_2 in NORMAL_MODE
-    if (score->score_2 < MAX_SCORE) {
-      score->score_2 += 1;
+    if (score->user_role == REFEREE) {
+      if (score->score_1 < MAX_SCORE) {
+        score->score_1 += 1;
+      } else {
+        score->score_1 = MIN_SCORE;  
+      }
     } else {
-      score->score_2 = MIN_SCORE;
+      if (score->score_2 < MAX_SCORE) {
+        score->score_2 += 1;
+      } else {
+        score->score_2 = MIN_SCORE;
+      }
     }
 
     adjust_whole_score_font();
 
-    set_score(SCORE_2, true, true);
+    render_score();
+    persist_score();
+    send_msg(SEND_CMD_SET_SCORE_VAL);
   } else {
     // Setting Score Counter position in SETTING_MODE
     switch (setting_mode_sc_position) {
@@ -390,29 +399,40 @@ static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
     init_score_counter_layer(window_layer);
     init_score_text_layers(window_layer);
     init_ruler_layer(window_layer);
+
+    reset_bg_color_callback(NULL);
   }
 }
 
 static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
     // Increment score_1 in NORMAL_MODE
-    if (score->score_1 < MAX_SCORE) {
-      score->score_1 += 1;
+    if (score->user_role == REFEREE) {
+      if (score->score_2 < MAX_SCORE) {
+        score->score_2 += 1;
+      } else {
+        score->score_2 = MIN_SCORE;  
+      }
     } else {
-      score->score_1 = MIN_SCORE;
+      if (score->score_1 < MAX_SCORE) {
+        score->score_1 += 1;
+      } else {
+        score->score_1 = MIN_SCORE;
+      }
     }
 
     adjust_whole_score_font();
 
-    set_score(SCORE_1, true, true);
+    persist_score();
+    send_msg(SEND_CMD_SET_SCORE_VAL);
   } else {
     // Swapping score in SETTING_MODE
     swap_numbers(&score->score_1, &score->score_2);
 
     is_score_swapped = !is_score_swapped;
-
-    set_score(SCORE_1 | SCORE_2, false, false);
   }
+
+  render_score();
 }
 
 /**
@@ -420,15 +440,25 @@ static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
  */
 static void up_long_click_handler_down(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
-    if (score->score_2 > MIN_SCORE) {
-      score->score_2 -= 1;
+    if (score->user_role == REFEREE) {
+      if (score->score_1 > MIN_SCORE) {
+        score->score_1 -= 1;
+      } else {
+        score->score_1 = MAX_SCORE;  
+      }
     } else {
-      score->score_2 = MAX_SCORE;
+      if (score->score_2 > MIN_SCORE) {
+        score->score_2 -= 1;
+      } else {
+        score->score_2 = MAX_SCORE;
+      }
     }
 
     adjust_whole_score_font();
 
-    set_score(SCORE_2, true, true);
+    render_score();
+    persist_score();
+    send_msg(SEND_CMD_SET_SCORE_VAL);
   }
 }
 
@@ -437,15 +467,25 @@ static void up_long_click_handler_down(ClickRecognizerRef recognizer, void *cont
  */
 static void down_long_click_handler_down(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
-    if (score->score_1 > MIN_SCORE) {
-      score->score_1 -= 1;
+    if (score->user_role == REFEREE) {
+      if (score->score_2 > MIN_SCORE) {
+        score->score_2 -= 1;
+      } else {
+        score->score_2 = MAX_SCORE;  
+      }
     } else {
-      score->score_1 = MAX_SCORE;
+      if (score->score_1 > MIN_SCORE) {
+        score->score_1 -= 1;
+      } else {
+        score->score_1 = MAX_SCORE;
+      }
     }
 
     adjust_whole_score_font();
 
-    set_score(SCORE_1, true, true);
+    render_score();
+    persist_score();
+    send_msg(SEND_CMD_SET_SCORE_VAL);
   }
 }
 
@@ -453,7 +493,7 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
   if (btn_mode == NORMAL_MODE) {
     // Re-send last score in NORMAL_MODE
     reset_bg_color_callback(NULL);
-    send_msg(CMD_SET_SCORE_VAL);
+    send_msg(SEND_CMD_SET_SCORE_VAL);
   } else {
     // In SETTING_MODE: stop Score Counter blinking, confirm Score Counter 
     // orientation and score if swapped.
@@ -471,14 +511,13 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
 
     if (is_score_swapped) {
       // Confirm swapped score as the new score.
-      set_score(SCORE_1 | SCORE_2, true, true);
+      persist_score();
       is_score_swapped = false;
     }
 
-    // Persist user role & Score Counter position.
-    persist_write_int(S_USER_ROLE_KEY, score->user_role);
-    persist_write_int(S_SC_POS_TO_PLAYER_KEY, score->sc_2_player_position);
-    persist_write_int(S_SC_POS_TO_REFEREE_KEY, score->sc_2_referee_position);
+    send_msg(SEND_CMD_SET_SCORE_VAL);
+
+    persist_user_role_and_sc_position();
   }
 }
 
@@ -492,7 +531,9 @@ static void select_long_click_handler_down(ClickRecognizerRef recognizer, void *
 
     adjust_whole_score_font();
 
-    set_score(SCORE_1 | SCORE_2, true, true);
+    render_score();
+    persist_score();
+    send_msg(SEND_CMD_SET_SCORE_VAL);
   }
 }
 
@@ -516,7 +557,8 @@ static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
     // Take back swapping.
     if (is_score_swapped) {
       swap_numbers(&score->score_1, &score->score_2);
-      set_score(SCORE_1 | SCORE_2, true, true);
+      render_score();
+      persist_score();
       is_score_swapped = false;
     }
     
@@ -529,47 +571,37 @@ static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
 /**
  * score_number: a bitmask of all the score parts that have changed
  */
-static void set_score(ScoreNumber score_number, bool persist, bool send) {
-  if (score_number & SCORE_1) {
-    snprintf(score->score_1_text, sizeof(score->score_1_text), "%d", score->score_1);
-    
-    if (persist) {
-      persist_write_int(S_SCORE_1_KEY, score->score_1);
-    }
-
-    if (s_my_score_text_layer != NULL) {
-      text_layer_set_text(s_my_score_text_layer, score->score_1_text);
-    }
-  }
-  if (score_number & SCORE_2) {
-    snprintf(score->score_2_text, sizeof(score->score_2_text), "%d", score->score_2);
-    
-    if (persist) {
-      persist_write_int(S_SCORE_2_KEY, score->score_2);
-    }
-
-    if (s_opponent_score_text_layer != NULL) {
-      text_layer_set_text(s_opponent_score_text_layer, score->score_2_text);
-    }
-  }
-
+static void render_score() {
+  snprintf(score->score_1_text, sizeof(score->score_1_text), "%d", score->score_1);
+  snprintf(score->score_2_text, sizeof(score->score_2_text), "%d", score->score_2);
   snprintf(score->whole_score_text, sizeof(score->whole_score_text), "%s:%s", 
-      score->score_2_text, score->score_1_text);
-
+      score->score_1_text, score->score_2_text);
+  
+  if (s_my_score_text_layer != NULL) {
+    text_layer_set_text(s_my_score_text_layer, score->score_1_text);
+  }
+  if (s_opponent_score_text_layer != NULL) {
+    text_layer_set_text(s_opponent_score_text_layer, score->score_2_text);
+  }
   if (s_whole_score_text_layer != NULL) {
     text_layer_set_text(s_whole_score_text_layer, score->whole_score_text);
   }
 
-  time(&score->timestamp);
   reset_bg_color_callback(NULL);
+}
 
-  if (send) {
-    send_msg(CMD_SET_SCORE_VAL);
-  }
+static void persist_score() {
+  time(&score->timestamp);
 
-  if (persist) {
-    persist_write_int(S_TIMESTAMP_KEY, score->timestamp);
-  }
+  persist_write_int(S_SCORE_1_KEY, score->score_1);
+  persist_write_int(S_SCORE_2_KEY, score->score_2);
+  persist_write_int(S_TIMESTAMP_KEY, score->timestamp);
+}
+
+static void persist_user_role_and_sc_position() {
+  persist_write_int(S_USER_ROLE_KEY, score->user_role);
+  persist_write_int(S_SC_POS_TO_PLAYER_KEY, score->sc_2_player_position);
+  persist_write_int(S_SC_POS_TO_REFEREE_KEY, score->sc_2_referee_position);
 }
 
 static void set_setting_mode_cfg_from_normal_mode_cfg() {
@@ -607,6 +639,63 @@ static void set_normal_mode_cfg_from_setting_mode_cfg() {
       score->sc_2_referee_position = SAME_SIDE;
       break;
   }
+}
+
+/**
+ * Find out from current mode and settings, if the score should be swapped
+ * before sending to the Score Counter or when receiving from the smartphone.
+ */
+static inline bool should_swap_before_send_or_after_receive() {
+  return (btn_mode == NORMAL_MODE 
+    && ((score->user_role == PLAYER
+    && score->sc_2_player_position == RIGHT_EDGE)
+    || (score->user_role == REFEREE 
+    && score->sc_2_referee_position == SAME_SIDE))) 
+    || (btn_mode == SETTING_MODE 
+    && (setting_mode_sc_position == SC_SET_RIGHT 
+    || setting_mode_sc_position == SC_SET_BOTTOM));
+}
+
+static void inbox_received_callback(DictionaryIterator *iter, void *context) {
+  Tuple *cmd_tuple = dict_find(iter, RECEIVE_CMD_KEY);
+
+  if (cmd_tuple) {
+    uint8_t cmd_val = cmd_tuple->value->uint8;
+
+    switch (cmd_val) {
+      case RECEIVE_CMD_SET_SCORE_VAL:
+        {
+          Tuple *score1_tuple = dict_find(iter, RECEIVE_SCORE_1_KEY);
+          Tuple *score2_tuple = dict_find(iter, RECEIVE_SCORE_2_KEY);
+
+          if (score1_tuple && score2_tuple) {
+            if (should_swap_before_send_or_after_receive()) {
+              score->score_1 = score2_tuple->value->uint16;
+              score->score_2 = score1_tuple->value->uint16;  
+            } else {
+              score->score_1 = score1_tuple->value->uint16;
+              score->score_2 = score2_tuple->value->uint16;
+            }
+
+            APP_LOG(APP_LOG_LEVEL_INFO, 
+              "Received score %d:%d", score->score_1, score->score_2);
+
+            render_score();
+            persist_score();
+            set_bg_color_on_colored_screen(GColorCyan);
+          } else {
+            APP_LOG(APP_LOG_LEVEL_WARNING, 
+              "Receive score command received, but no score!");
+          }
+        }
+        break;
+    }
+  }
+}
+
+static void inbox_dropped_callback(AppMessageResult reason, void *context) {
+  APP_LOG(APP_LOG_LEVEL_ERROR, "Message dropped. Reason: %d", (int)reason);
+  set_bg_color_on_colored_screen(GColorOrange);
 }
 
 static void outbox_sent_handler(DictionaryIterator *iterator, void *context) {
@@ -772,6 +861,8 @@ static void init() {
     .unload = main_window_unload,
   });
 
+  app_message_register_inbox_received(inbox_received_callback);
+  app_message_register_inbox_dropped(inbox_dropped_callback);
   app_message_register_outbox_sent(outbox_sent_handler);
   app_message_register_outbox_failed(outbox_failed_handler);
   app_message_open(INBOUND_SIZE, OUTBOUND_SIZE);

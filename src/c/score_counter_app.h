@@ -102,16 +102,28 @@ typedef enum {
 } SettingModeSCPosition;
 
 typedef enum {
-  CMD_KEY = 10,
-  SCORE_1_KEY = 11,
-  SCORE_2_KEY = 12,
-  TIMESTAMP_KEY = 13
+  SEND_CMD_KEY = 10,
+  SEND_SCORE_1_KEY = 11,
+  SEND_SCORE_2_KEY = 12,
+  SEND_TIMESTAMP_KEY = 13
 } DictSendKey;
 
 typedef enum {
-  CMD_SET_SCORE_VAL = 1,
-  CMD_SYNC_SCORE_VAL = 2
+  SEND_CMD_SET_SCORE_VAL = 1,
+  SEND_CMD_SYNC_SCORE_VAL = 2
 } DictSendCmdVal;
+
+typedef enum {
+  RECEIVE_CMD_KEY = 10,
+  RECEIVE_SCORE_1_KEY = 11,
+  RECEIVE_SCORE_2_KEY = 12,
+  RECEIVE_TIMESTAMP_KEY = 13
+} DictReceiveKey;
+
+typedef enum {
+  RECEIVE_CMD_SET_SCORE_VAL = 1,
+  RECEIVE_CMD_SYNC_SCORE_VAL = 2
+} DictReceiveCmdVal;
 
 typedef enum {
   S_SCORE_1_KEY = 11,
@@ -121,11 +133,6 @@ typedef enum {
   S_SC_POS_TO_PLAYER_KEY = 15,
   S_SC_POS_TO_REFEREE_KEY = 16
 } Storage;
-
-typedef enum {
-    SCORE_1 = 0x1,
-    SCORE_2 = 0x2
-} ScoreNumber;
 
 
 /**
@@ -184,10 +191,17 @@ static void down_long_click_handler_down(
 static void select_click_handler(ClickRecognizerRef recognizer, void *context);
 static void select_long_click_handler_down(ClickRecognizerRef recognizer, void *context);
 static void back_click_handler(ClickRecognizerRef recognizer, void *context);
+static void render_score();
+static void persist_score();
+static void persist_user_role_and_sc_position();
 static void set_setting_mode_cfg_from_normal_mode_cfg();
 static void set_normal_mode_cfg_from_setting_mode_cfg();
-static void set_score(ScoreNumber score_number, bool persist, bool send);
+static inline bool should_swap_before_send_or_after_receive();
+static void inbox_received_callback(DictionaryIterator *iter, void *context);
+static void inbox_dropped_callback(AppMessageResult reason, void *context);
 static void outbox_sent_handler(DictionaryIterator *iterator, void *context);
+static void outbox_failed_handler(DictionaryIterator *iterator, 
+    AppMessageResult reason, void *context);
 static void reset_bg_color_callback(void *data);
 static void set_bg_color_on_colored_screen(GColor8 color);
 static void click_config_provider(void *context);
