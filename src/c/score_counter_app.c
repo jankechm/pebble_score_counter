@@ -54,6 +54,7 @@ static void send_msg(DictSendCmdVal cmd_val) {
   Tuplet cmd_tuplet = TupletInteger(SEND_CMD_KEY, (uint8_t)cmd_val);
   Tuplet score1_tuplet = TupletInteger(SEND_SCORE_1_KEY, score_1_to_transfer);
   Tuplet score2_tuplet = TupletInteger(SEND_SCORE_2_KEY, score_2_to_transfer);
+  Tuplet timestamp_tuplet = TupletInteger(SEND_TIMESTAMP_KEY, (unsigned int)score->timestamp);
 
   DictionaryIterator *iter;
   AppMessageResult result_code = app_message_outbox_begin(&iter);
@@ -62,12 +63,7 @@ static void send_msg(DictSendCmdVal cmd_val) {
     dict_write_tuplet(iter, &cmd_tuplet);
     dict_write_tuplet(iter, &score1_tuplet);
     dict_write_tuplet(iter, &score2_tuplet);
-
-    // When syncing, timestamp is needed
-    if (cmd_val == SEND_CMD_SYNC_SCORE_VAL) {
-      Tuplet timestamp_tuplet = TupletInteger(SEND_TIMESTAMP_KEY, (unsigned int)score->timestamp);
-      dict_write_tuplet(iter, &timestamp_tuplet);
-    }
+    dict_write_tuplet(iter, &timestamp_tuplet);
 
     dict_write_end(iter);
 
@@ -375,6 +371,8 @@ static void up_click_handler(ClickRecognizerRef recognizer, void *context) {
     adjust_whole_score_font();
 
     render_score();
+
+    time(&score->timestamp);
     persist_score();
     send_msg(SEND_CMD_SET_SCORE_VAL);
   } else {
@@ -423,6 +421,7 @@ static void down_click_handler(ClickRecognizerRef recognizer, void *context) {
 
     adjust_whole_score_font();
 
+    time(&score->timestamp);
     persist_score();
     send_msg(SEND_CMD_SET_SCORE_VAL);
   } else {
@@ -457,6 +456,8 @@ static void up_long_click_handler_down(ClickRecognizerRef recognizer, void *cont
     adjust_whole_score_font();
 
     render_score();
+
+    time(&score->timestamp);
     persist_score();
     send_msg(SEND_CMD_SET_SCORE_VAL);
   }
@@ -484,6 +485,8 @@ static void down_long_click_handler_down(ClickRecognizerRef recognizer, void *co
     adjust_whole_score_font();
 
     render_score();
+
+    time(&score->timestamp);
     persist_score();
     send_msg(SEND_CMD_SET_SCORE_VAL);
   }
@@ -509,6 +512,8 @@ static void select_click_handler(ClickRecognizerRef recognizer, void *context) {
     init_score_text_layers(window_layer);
     init_ruler_layer(window_layer);
 
+    time(&score->timestamp);
+
     if (is_score_swapped) {
       // Confirm swapped score as the new score.
       persist_score();
@@ -532,6 +537,8 @@ static void select_long_click_handler_down(ClickRecognizerRef recognizer, void *
     adjust_whole_score_font();
 
     render_score();
+
+    time(&score->timestamp);
     persist_score();
     send_msg(SEND_CMD_SET_SCORE_VAL);
   }
@@ -558,13 +565,15 @@ static void back_click_handler(ClickRecognizerRef recognizer, void *context) {
     if (is_score_swapped) {
       swap_numbers(&score->score_1, &score->score_2);
       render_score();
-      persist_score();
+      // persist_score();
       is_score_swapped = false;
     }
     
     init_score_counter_layer(window_layer);
     init_score_text_layers(window_layer);
     init_ruler_layer(window_layer);
+
+    reset_bg_color_callback(NULL);
   }
 }
 
@@ -591,8 +600,6 @@ static void render_score() {
 }
 
 static void persist_score() {
-  time(&score->timestamp);
-
   persist_write_int(S_SCORE_1_KEY, score->score_1);
   persist_write_int(S_SCORE_2_KEY, score->score_2);
   persist_write_int(S_TIMESTAMP_KEY, score->timestamp);
@@ -667,6 +674,7 @@ static void inbox_received_callback(DictionaryIterator *iter, void *context) {
         {
           Tuple *score1_tuple = dict_find(iter, RECEIVE_SCORE_1_KEY);
           Tuple *score2_tuple = dict_find(iter, RECEIVE_SCORE_2_KEY);
+          Tuple *timestamp_tuple = dict_find(iter, RECEIVE_TIMESTAMP_KEY);
 
           if (score1_tuple && score2_tuple) {
             if (should_swap_before_send_or_after_receive()) {
@@ -675,6 +683,12 @@ static void inbox_received_callback(DictionaryIterator *iter, void *context) {
             } else {
               score->score_1 = score1_tuple->value->uint16;
               score->score_2 = score2_tuple->value->uint16;
+            }
+
+            if (timestamp_tuple) {
+              score->timestamp = timestamp_tuple->value->uint32;
+            } else {
+              time(&score->timestamp);
             }
 
             APP_LOG(APP_LOG_LEVEL_INFO, 
@@ -688,6 +702,11 @@ static void inbox_received_callback(DictionaryIterator *iter, void *context) {
               "Receive score command received, but no score!");
           }
         }
+        break;
+      case RECEIVE_CMD_SYNC_SCORE_VAL:
+        // Sync request received, send data to the phone.
+        set_bg_color_on_colored_screen(GColorElectricUltramarine);
+        send_msg(SEND_CMD_SYNC_SCORE_VAL);
         break;
     }
   }
@@ -800,6 +819,10 @@ static void app_connection_handler(bool connected) {
 
   custom_status_bar_layer_set_text(custom_status_bar, CSB_TEXT_LEFT, 
     connected ? LINKED_TXT : NO_LINK_TXT);
+
+  if (connected) {
+    send_msg(SEND_CMD_SYNC_SCORE_VAL);
+  }
 }
 
 static void battery_state_handler(BatteryChargeState charge) {
@@ -845,11 +868,6 @@ static void init() {
   // Get updates when the current minute changes
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
 
-  // Get the updates when the connection to the Pebble app on the phone changes.
-  connection_service_subscribe((ConnectionHandlers) {
-  .pebble_app_connection_handler = app_connection_handler
-  });
-
   // Get battery state updates
   battery_state_service_subscribe(battery_state_handler);
 
@@ -866,6 +884,11 @@ static void init() {
   app_message_register_outbox_sent(outbox_sent_handler);
   app_message_register_outbox_failed(outbox_failed_handler);
   app_message_open(INBOUND_SIZE, OUTBOUND_SIZE);
+
+  // Get the updates when the connection to the Pebble app on the phone changes.
+  connection_service_subscribe((ConnectionHandlers) {
+    .pebble_app_connection_handler = app_connection_handler
+  });
 
   window_stack_push(s_main_window, true);
 }
