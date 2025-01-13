@@ -7,3 +7,9 @@ This is the link for the Android app
 https://github.com/jankechm/Score_Counter_RC
 and this is the link for the Score Counter Display 
 https://github.com/jankechm/BLE-Score-Counter-Display.
+
+A videorecord about how the smartwatch controls score on both the Score Counter and the mobile app.
+
+
+https://github.com/user-attachments/assets/d60756c1-728c-4792-ae84-1c57d43b5568
+
