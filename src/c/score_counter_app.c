@@ -41,8 +41,8 @@ static void send_msg(DictSendCmdVal cmd_val) {
     return;
   }
 
-  uint8_t score_1_to_transfer;
-  uint8_t score_2_to_transfer;
+  uint16_t score_1_to_transfer;
+  uint16_t score_2_to_transfer;
   if (should_swap_before_send_or_after_receive()) {
     score_1_to_transfer = score->score_2;
     score_2_to_transfer = score->score_1;
